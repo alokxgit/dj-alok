@@ -1623,6 +1623,63 @@ body {
     display: none !important;
 }
 
+/* Divider between button groups in the sidebar */
+.bar-divider {
+    width: 70%;
+    height: 2px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 1px;
+    margin: 0 auto;
+    flex-shrink: 0;
+}
+
+/* EQ hidden state — collapses with a smooth transition */
+.eq-slider-container.eq-hidden {
+    overflow: hidden;
+    max-height: 0 !important;
+    opacity: 0;
+    pointer-events: none;
+    padding: 0 !important;
+    transition: max-height 0.35s ease, opacity 0.25s ease;
+}
+
+.eq-slider-container {
+    transition: max-height 0.35s ease, opacity 0.25s ease;
+    max-height: 600px;
+    opacity: 1;
+}
+
+/* Inline EQ toggle button inside the Bar Shape section */
+.toggle-eq-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-top: 0.5rem;
+    padding: 0.3rem 0.65rem;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.6);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.7rem;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    transition: all 0.2s ease;
+}
+
+.toggle-eq-inline:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.25);
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.toggle-eq-inline.active {
+    background: rgba(29, 185, 84, 0.12);
+    border-color: rgba(29, 185, 84, 0.4);
+    color: var(--accent);
+}
+
 .bar-btn.active {
     background: rgba(29, 185, 84, 0.3);
     border-color: var(--accent);
@@ -2332,6 +2389,29 @@ body {
     position: relative;
 }
 
+.eq-screen-overlay {
+    position: absolute;
+    inset: 0;
+    border-radius: 16px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    z-index: 3;
+    background:
+        repeating-linear-gradient(
+            0deg,
+            rgba(0, 0, 0, 0.28) 0px,
+            rgba(0, 0, 0, 0.28) 2px,
+            rgba(0, 0, 0, 0) 2px,
+            rgba(0, 0, 0, 0) 4px
+        ),
+        radial-gradient(circle at center, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.55) 70%);
+}
+
+.eq-slider-container.retro-screen .eq-screen-overlay {
+    opacity: 1;
+}
+
 .eq-slider-container::before {
     content: '';
     position: absolute;
@@ -2350,6 +2430,37 @@ body {
     right: 1rem;
     height: 2px;
     background: linear-gradient(90deg, transparent 0%, rgba(29, 185, 84, 0.3) 50%, transparent 100%);
+}
+
+/* Transparent wrapper — doesn't break parent flex layout */
+#eq-sliders-section {
+    display: contents;
+}
+
+/* YouTube panel fills the eq-slider-container exactly via absolute positioning */
+#eq-youtube-section {
+    position: absolute;
+    inset: 0;
+    display: none;
+    flex-direction: column;
+    border-radius: 14px;
+    overflow: hidden;
+    z-index: 2;
+}
+
+#yt-player-target {
+    width: 100%;
+    height: 100%;
+    flex: 1;
+}
+
+/* Force the YT API-generated iframe to fill its container */
+#yt-player-target iframe,
+#eq-youtube-section iframe {
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    border: none;
 }
 
 .eq-slider-item {

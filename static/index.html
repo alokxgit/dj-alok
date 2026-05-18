@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Music Player</title>
     <link rel="stylesheet" href="/style.css">
+    <!-- YouTube IFrame Player API -->
+    <script src="https://www.youtube.com/iframe_api"></script>
 </head>
 <body>
     <div class="container">
@@ -406,26 +408,43 @@
                         <div class="spectrum-shapes">
                             <h3>Bar Shape</h3>
                             <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
-                                <button class="shape-btn active" data-shape="bars" title="Classic Bars">▬</button>
-                                <button class="shape-btn" data-shape="rounded" title="Rounded Bars">▭</button>
-                                <button class="shape-btn" data-shape="circles" title="Circles">⬤</button>
-                                <button class="shape-btn" data-shape="lines" title="Lines">│</button>
-                                <button class="shape-btn" data-shape="dots" title="Dots">⋮</button>
-                                <button class="shape-btn" data-shape="wave" title="Wave">∿</button>
-                                <button class="shape-btn" data-shape="blocks" title="Blocks">▦</button>
-                                <button class="shape-btn" data-shape="mirror" title="Mirror Vertical" style="transform: rotate(-90deg);">⫴</button>
-                                <button class="shape-btn" data-shape="flames" title="Flames">▲▲</button>
-                                <button class="shape-btn" data-shape="arches" title="Arches">⌒</button>
-                                <button class="shape-btn" data-shape="diamonds" title="Diamonds">◆</button>
-                                <button class="shape-btn" data-shape="pyramids" title="Pyramids">▲</button>
-                                <button class="shape-btn" data-shape="rings" title="Rings">◎</button>
-                                <button class="shape-btn" data-shape="hexagons" title="Hexagons">⬡</button>
-                                <button class="shape-btn" data-shape="lightning" title="Lightning">⟋</button>
-                                <button class="shape-btn" data-shape="neon" title="Neon">◫</button>
-                                <button class="shape-btn" data-shape="squares" title="Squares">▢</button>
-                                <button class="shape-btn" data-shape="stars" title="Stars">★</button>
-                                <button class="shape-btn" data-shape="triangles" title="Triangles">▼</button>
-                                <button class="shape-btn" data-shape="crosses" title="Crosses">✕</button>
+                                <button class="shape-btn active" data-shape="bars"     title="Classic Bars">▬</button>
+                                <button class="shape-btn"        data-shape="rounded"  title="Rounded Bars">▭</button>
+                                <button class="shape-btn"        data-shape="wave"     title="Wave">∿</button>
+                                <button class="shape-btn"        data-shape="mirror"   title="Mirror" style="transform:rotate(-90deg)">⫴</button>
+                                <button class="shape-btn"        data-shape="lines"    title="Lines">│</button>
+                                <button class="shape-btn"        data-shape="dots"     title="Dots">⋮</button>
+                                <button class="shape-btn"        data-shape="circles"  title="Circles">⬤</button>
+                                <button class="shape-btn"        data-shape="neon"     title="Neon">◫</button>
+                            </div>
+                            <!-- Toggle button row -->
+                            <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-top:0.5rem;">
+                                <button class="toggle-eq-inline" id="toggle-eq-btn" title="Hide EQ">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <line x1="4"  y1="6"  x2="4"  y2="18"/>
+                                        <line x1="10" y1="4"  x2="10" y2="18"/>
+                                        <line x1="16" y1="8"  x2="16" y2="18"/>
+                                        <line x1="22" y1="2"  x2="22" y2="18"/>
+                                        <line x1="1"  y1="21" x2="23" y2="21"/>
+                                    </svg>
+                                    <span>EQ</span>
+                                </button>
+                                <button class="toggle-eq-inline" id="toggle-yt-btn" title="Watch on YouTube">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46A2.78 2.78 0 0 0 1.46 6.42 29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58 2.78 2.78 0 0 0 1.95 1.96C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.96A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/>
+                                        <polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"/>
+                                    </svg>
+                                    <span>YT</span>
+                                </button>
+                                <button class="toggle-eq-inline" id="toggle-eq-screen-btn" title="Show Screen Effect">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <rect x="2" y="3" width="20" height="14" rx="2"/>
+                                        <line x1="6" y1="8" x2="18" y2="8"/>
+                                        <line x1="6" y1="12" x2="18" y2="12"/>
+                                        <line x1="6" y1="16" x2="18" y2="16"/>
+                                    </svg>
+                                    <span>Screen</span>
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -442,6 +461,8 @@
                             </button>
                         </div>
                         <div class="eq-slider-container">
+                            <!-- EQ sliders section (hideable) -->
+                            <div id="eq-sliders-section">
                     <div class="eq-slider-item">
                         <div class="eq-slider-wrapper">
                             <div class="eq-scale">
@@ -742,6 +763,18 @@
                         <div class="eq-value" id="eq-value-9">0</div>
                         <div class="eq-label">16kHz</div>
                     </div>
+                            </div><!-- /#eq-sliders-section -->
+
+                            <!-- YouTube section (hidden by default) -->
+                            <div id="eq-youtube-section" style="display:none;">
+                                <!-- YT IFrame API targets this div -->
+                                <div id="yt-player-target"></div>
+                                <div id="eq-yt-placeholder" style="display:flex;align-items:center;justify-content:center;height:220px;color:rgba(255,255,255,0.3);font-size:0.85rem;flex-direction:column;gap:0.5rem;">
+                                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46A2.78 2.78 0 0 0 1.46 6.42 29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58 2.78 2.78 0 0 0 1.95 1.96C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.96A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02" fill="currentColor"/></svg>
+                                    <span>Play a song to load YouTube</span>
+                                </div>
+                            </div>
+                            <div class="eq-screen-overlay" aria-hidden="true"></div>
                     </div>
                 </div>
                     </div>

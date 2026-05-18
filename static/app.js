@@ -564,6 +564,7 @@ function playSong(index) {
     updatePlayButton();
     updateLyricsIndicator(); // Check if current song has lyrics
     updateLyricsPageIfOpen(); // Update lyrics if lyrics page is open
+    refreshYouTubePanelIfOpen(); // Reload YouTube if panel is open
 }
 
 // Update player info
@@ -2089,6 +2090,67 @@ function setupStudioControls() {
             e.currentTarget.classList.add('active');
         });
     });
+
+    // EQ show / hide toggle button (hides the whole eq-slider-container)
+    const toggleEqBtn = document.getElementById('toggle-eq-btn');
+    if (toggleEqBtn) {
+        toggleEqBtn.addEventListener('click', () => {
+            const eqContainer = document.querySelector('.eq-slider-container');
+            if (!eqContainer) return;
+            const isHidden = eqContainer.classList.toggle('eq-hidden');
+            toggleEqBtn.classList.toggle('active', isHidden);
+            toggleEqBtn.title = isHidden ? 'Show EQ' : 'Hide EQ';
+        });
+    }
+
+    // YouTube toggle — hides EQ sliders inside the body, shows YouTube video
+    const toggleYtBtn = document.getElementById('toggle-yt-btn');
+    if (toggleYtBtn) {
+        toggleYtBtn.addEventListener('click', () => {
+            const slidersSection  = document.getElementById('eq-sliders-section');
+            const ytSection       = document.getElementById('eq-youtube-section');
+            if (!slidersSection || !ytSection) return;
+
+            const ytActive = ytSection.style.display !== 'none';
+
+            if (ytActive) {
+                // Hide YouTube, restore sliders
+                ytSection.style.display = 'none';
+                slidersSection.style.visibility = '';
+                toggleYtBtn.classList.remove('active');
+                toggleYtBtn.title = 'Watch on YouTube';
+                _destroyYtPlayer();
+            } else {
+                // Hide sliders (keep layout so container stays same size)
+                // then show YouTube panel which fills it via position:absolute
+                slidersSection.style.visibility = 'hidden';
+                ytSection.style.display = 'flex';
+
+                // Size the YT player to match the container
+                const eqContainer = document.querySelector('.eq-slider-container');
+                const ytTarget = document.getElementById('yt-player-target');
+                if (eqContainer && ytTarget) {
+                    ytTarget.style.height = eqContainer.offsetHeight + 'px';
+                }
+
+                toggleYtBtn.classList.add('active');
+                toggleYtBtn.title = 'Hide YouTube';
+                loadYouTubeForCurrentSong();
+            }
+        });
+    }
+
+    // EQ screen effect toggle
+    const toggleEqScreenBtn = document.getElementById('toggle-eq-screen-btn');
+    if (toggleEqScreenBtn) {
+        toggleEqScreenBtn.addEventListener('click', () => {
+            const eqContainer = document.querySelector('.eq-slider-container');
+            if (!eqContainer) return;
+            const isActive = eqContainer.classList.toggle('retro-screen');
+            toggleEqScreenBtn.classList.toggle('active', isActive);
+            toggleEqScreenBtn.title = isActive ? 'Hide Screen Effect' : 'Show Screen Effect';
+        });
+    }
 }
 
 function toggleStudio() {
@@ -2571,18 +2633,13 @@ function renderVisualizationToCanvas(canvas, ctx, frequencyData) {
                 y = canvas.height - barHeight;
             }
             
-            // Calculate hue based on position and theme (use actualIndex so colors reverse with data)
+            // Calculate hue based on position and theme
             const hue = theme.hueStart + (actualIndex / barCount) * theme.hueRange;
             
-            // Create gradient for each bar
-            const gradient = ctx.createLinearGradient(0, y, 0, canvas.height);
-            gradient.addColorStop(0, `hsla(${hue}, ${theme.saturation}%, ${theme.lightness + 10}%, 0.9)`);
-            gradient.addColorStop(0.5, `hsla(${hue}, ${theme.saturation}%, ${theme.lightness}%, 0.7)`);
-            gradient.addColorStop(1, `hsla(${hue}, ${theme.saturation}%, ${theme.lightness - 10}%, 0.5)`);
+            // Use solid HSL color (avoids per-bar gradient object allocation each frame)
+            ctx.fillStyle = `hsla(${hue}, ${theme.saturation}%, ${theme.lightness}%, 0.88)`;
             
-            ctx.fillStyle = gradient;
-            
-            // Apply enhanced glow effect with brighter, more saturated color
+            // Apply glow effect
             ctx.shadowBlur = barShadow;
             ctx.shadowColor = `hsla(${hue}, 100%, ${theme.lightness + 20}%, 0.8)`;
             
@@ -3302,29 +3359,17 @@ function renderVisualizationToCanvas(canvas, ctx, frequencyData) {
             }
         }
     
-    // Glass overlay effect - full canvas with blur
+    // Subtle vignette overlay (no blur filter — removed for performance)
     ctx.save();
     ctx.globalCompositeOperation = 'source-over';
-    ctx.filter = 'blur(45px)';
-    
-    // Full canvas gradient overlay
-    const fullGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    fullGradient.addColorStop(0, 'rgba(255, 255, 255, 0.08)');
-    fullGradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.12)');
-    fullGradient.addColorStop(1, 'rgba(255, 255, 255, 0.08)');
-    ctx.fillStyle = fullGradient;
+    const vigOverlay = ctx.createRadialGradient(
+        canvas.width / 2, canvas.height / 2, canvas.height * 0.3,
+        canvas.width / 2, canvas.height / 2, canvas.width * 0.8
+    );
+    vigOverlay.addColorStop(0, 'rgba(0,0,0,0)');
+    vigOverlay.addColorStop(1, 'rgba(0,0,0,0.25)');
+    ctx.fillStyle = vigOverlay;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
-    // Add frosted glass noise effect
-    for (let i = 0; i < 100; i++) {
-        ctx.fillStyle = `rgba(255, 255, 255, ${Math.random() * 0.03})`;
-        const x = Math.random() * canvas.width;
-        const y = Math.random() * canvas.height;
-        const size = Math.random() * 3;
-        ctx.fillRect(x, y, size, size);
-    }
-    
-    ctx.filter = 'none';
     ctx.restore();
     
     // Rainy glass overlay effect - sophisticated wet glass texture
@@ -3571,8 +3616,11 @@ function startFrequencyVisualization(targetCanvas = null) {
                 }
                 canvas.pausedFrameDrawn = true;
             }
-            animationId = requestAnimationFrame(draw);
-            return; // Don't do expensive FFT analysis or bar rendering when paused
+            // When paused and static frame is drawn, stop the rAF loop entirely.
+            // The draw() will be restarted by the audio 'play' event listener below.
+            canvas._pauseLoopStopped = true;
+            animationId = null; // mark loop as dead so resume listener can restart it
+            return; // No rAF scheduled — zero CPU when paused
         }
         
         // Clear the paused flag when playing
@@ -3598,12 +3646,26 @@ function startFrequencyVisualization(targetCanvas = null) {
         }
     }
     
+    // Restart the visualization loop when audio resumes from pause
+    if (!canvas._playResumeListener) {
+        canvas._playResumeListener = () => {
+            canvas.pausedFrameDrawn = false;
+            canvas._pauseLoopStopped = false;
+            // Always restart — animationId is null when loop was stopped
+            if (!animationId) {
+                animationId = requestAnimationFrame(draw);
+            }
+        };
+        audio.addEventListener('play', canvas._playResumeListener);
+    }
+
     draw();
 }
 
 function stopFrequencyVisualization() {
     if (animationId) {
         cancelAnimationFrame(animationId);
+        clearTimeout(animationId);
         animationId = null;
     }
 }
@@ -3634,13 +3696,23 @@ function updateAmbientLighting(frequencyData) {
     
     if (!frequencyData || !ambientLightingEnabled) return;
     
-    // Calculate energy from different frequency bands with heavy bass focus
-    const subBass = frequencyData.slice(0, 4).reduce((a, b) => a + b, 0) / 4;
-    const bass = frequencyData.slice(0, 20).reduce((a, b) => a + b, 0) / 20;
-    const lowMid = frequencyData.slice(20, 60).reduce((a, b) => a + b, 0) / 40;
-    const mid = frequencyData.slice(60, 120).reduce((a, b) => a + b, 0) / 60;
-    const treble = frequencyData.slice(120, 200).reduce((a, b) => a + b, 0) / 80;
-    const highFreq = frequencyData.slice(200, 256).reduce((a, b) => a + b, 0) / 56;
+    // Calculate energy from different frequency bands — single pass, no array allocation
+    let subBassSum = 0, bassSum = 0, lowMidSum = 0, midSum = 0, trebleSum = 0, highFreqSum = 0;
+    for (let _fi = 0; _fi < frequencyData.length; _fi++) {
+        const _v = frequencyData[_fi];
+        if (_fi < 4)  subBassSum += _v;
+        if (_fi < 20) bassSum    += _v;
+        if (_fi >= 20  && _fi < 60)  lowMidSum  += _v;
+        if (_fi >= 60  && _fi < 120) midSum     += _v;
+        if (_fi >= 120 && _fi < 200) trebleSum  += _v;
+        if (_fi >= 200)              highFreqSum += _v;
+    }
+    const subBass  = subBassSum  / 4;
+    const bass     = bassSum     / 20;
+    const lowMid   = lowMidSum   / 40;
+    const mid      = midSum      / 60;
+    const treble   = trebleSum   / 80;
+    const highFreq = highFreqSum / 56;
     
     // Normalize values (0-1)
     const subBassIntensity = subBass / 255;
@@ -3766,35 +3838,18 @@ function updateAmbientLighting(frequencyData) {
     root.style.setProperty('--ambient-side-left', leftIntensity.toFixed(3));
     root.style.setProperty('--ambient-side-right', rightIntensity.toFixed(3));
     
-    // Convert hex theme color to RGB then to HSL for lighting
-    const hexToRgb = (hex) => {
-        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-        return result ? {
-            r: parseInt(result[1], 16) / 255,
-            g: parseInt(result[2], 16) / 255,
-            b: parseInt(result[3], 16) / 255
-        } : null;
-    };
-    
-    const rgbToHsl = (r, g, b) => {
-        const max = Math.max(r, g, b), min = Math.min(r, g, b);
-        let h, s, l = (max + min) / 2;
-        if (max === min) {
-            h = s = 0;
+    // Convert theme color to HSL using top-level helpers; cache result until color changes
+    if (!updateAmbientLighting._cachedColor || updateAmbientLighting._cachedColor !== lightingThemeColor) {
+        const _rgb = hexToRgb(lightingThemeColor); // top-level helper, returns {r,g,b} 0-255
+        if (_rgb) {
+            const _hsl = rgbToHsl(_rgb.r, _rgb.g, _rgb.b); // top-level helper, returns {h,s,l}
+            updateAmbientLighting._cachedHSL = [_hsl.h, _hsl.s, _hsl.l];
         } else {
-            const d = max - min;
-            s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-            switch (max) {
-                case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
-                case g: h = ((b - r) / d + 2) / 6; break;
-                case b: h = ((r - g) / d + 4) / 6; break;
-            }
+            updateAmbientLighting._cachedHSL = [142, 76, 36];
         }
-        return [h * 360, s * 100, l * 100];
-    };
-    
-    const rgb = hexToRgb(lightingThemeColor);
-    const [themeHue, themeSat, themeLight] = rgb ? rgbToHsl(rgb.r, rgb.g, rgb.b) : [142, 76, 36];
+        updateAmbientLighting._cachedColor = lightingThemeColor;
+    }
+    const [themeHue, themeSat, themeLight] = updateAmbientLighting._cachedHSL;
     
     // Apply hue shift from frequency analysis
     const dynamicHue = (themeHue + hueShift) % 360;
@@ -3806,6 +3861,150 @@ function updateAmbientLighting(frequencyData) {
         `hsla(${(dynamicHue + 60) % 360}, ${Math.min(100, themeSat * 1.25 + beatBoost)}%, ${Math.min(80, themeLight * 1.3 + beatBoost * 1.1)}%, ${0.35 + overallIntensity * 0.5})`);
     root.style.setProperty('--ambient-glow-tertiary', 
         `hsla(${(dynamicHue + 120) % 360}, ${Math.min(100, themeSat * 1.2 + beatBoost * 0.8)}%, ${Math.min(75, themeLight * 1.2 + beatBoost)}%, ${0.3 + overallIntensity * 0.4})`);
+}
+
+// ============================================
+// YouTube Panel — synced with local audio player
+// ============================================
+
+let _ytPlayer      = null;   // YT.Player instance
+let _ytReady       = false;  // API ready flag
+let _ytSyncActive  = false;  // are sync listeners attached?
+let _ytVideoId     = null;   // currently loaded video ID
+
+// Called by YouTube IFrame API once the script loads
+window.onYouTubeIframeAPIReady = function() {
+    _ytReady = true;
+};
+
+function _getVideoIdFromSong(song) {
+    if (!song) return null;
+    // yt-dlp saves as "Title-VIDEOID.mp3" where ID = 11 chars [A-Za-z0-9_-]
+    const base = (song.filename || '').replace(/\.[^.]+$/, '');
+    const m = base.match(/-([A-Za-z0-9_-]{11})$/);
+    return m ? m[1] : null;
+}
+
+function loadYouTubeForCurrentSong() {
+    const placeholder = document.getElementById('eq-yt-placeholder');
+
+    const song    = filteredSongs[currentSongIndex];
+    const videoId = song ? _getVideoIdFromSong(song) : null;
+
+    if (!videoId) {
+        // Destroy player if exists, show placeholder
+        _destroyYtPlayer();
+        if (placeholder) {
+            placeholder.style.display = 'flex';
+            const span = placeholder.querySelector('span');
+            if (span) span.textContent = song
+                ? 'No YouTube video linked (local file)'
+                : 'Play a song to load YouTube';
+        }
+        return;
+    }
+
+    if (placeholder) placeholder.style.display = 'none';
+
+    // Local audio is the sound source — YT is video only (will be muted)
+
+    if (_ytPlayer && _ytVideoId === videoId) {
+        // Same video already loaded — just sync position
+        _syncYtToAudio();
+        return;
+    }
+
+    _ytVideoId = videoId;
+
+    if (_ytPlayer) {
+        // Different video — load it into existing player
+        _ytPlayer.loadVideoById({ videoId, startSeconds: audio.currentTime });
+        _syncAttach();
+        return;
+    }
+
+    // First time — create player (wait for API ready)
+    const createPlayer = () => {
+        _ytPlayer = new YT.Player('yt-player-target', {
+            width:  '100%',
+            height: '100%',
+            videoId,
+            playerVars: {
+                autoplay:        0,
+                controls:        0,   // hide controls — audio is in our player
+                rel:             0,
+                modestbranding:  1,
+                start:           Math.floor(audio.currentTime),
+            },
+            events: {
+                onReady: (e) => {
+                    e.target.mute();                        // video only, no YT audio
+                    e.target.seekTo(audio.currentTime, true);
+                    if (!audio.paused) e.target.playVideo();
+                    else               e.target.pauseVideo();
+                    _syncAttach();
+                },
+            },
+        });
+    };
+
+    if (_ytReady) {
+        createPlayer();
+    } else {
+        const wait = setInterval(() => {
+            if (_ytReady) { clearInterval(wait); createPlayer(); }
+        }, 100);
+    }
+}
+
+// Mirror local audio events → YT player
+function _syncAttach() {
+    if (_ytSyncActive) return;
+    _ytSyncActive = true;
+
+    audio._ytPlay   = () => { if (_ytPlayer) { _ytPlayer.seekTo(audio.currentTime, true); _ytPlayer.playVideo();  } };
+    audio._ytPause  = () => { if (_ytPlayer) _ytPlayer.pauseVideo(); };
+    audio._ytSeeked = () => { if (_ytPlayer) _ytPlayer.seekTo(audio.currentTime, true); };
+
+    audio.addEventListener('play',   audio._ytPlay);
+    audio.addEventListener('pause',  audio._ytPause);
+    audio.addEventListener('seeked', audio._ytSeeked);
+}
+
+function _syncDetach() {
+    if (!_ytSyncActive) return;
+    audio.removeEventListener('play',   audio._ytPlay);
+    audio.removeEventListener('pause',  audio._ytPause);
+    audio.removeEventListener('seeked', audio._ytSeeked);
+    _ytSyncActive = false;
+}
+
+function _syncYtToAudio() {
+    if (!_ytPlayer) return;
+    _ytPlayer.seekTo(audio.currentTime, true);
+    if (!audio.paused) _ytPlayer.playVideo();
+    else               _ytPlayer.pauseVideo();
+    _syncAttach();
+}
+
+function _destroyYtPlayer() {
+    _syncDetach();
+    if (_ytPlayer) {
+        try { _ytPlayer.destroy(); } catch(e) {}
+        _ytPlayer = null;
+    }
+    _ytVideoId = null;
+    // Re-create the blank target div so next time API can mount into it
+    const old = document.getElementById('yt-player-target');
+    if (old) old.innerHTML = '';
+}
+
+// Auto-refresh the YouTube panel when the song changes and the panel is open
+function refreshYouTubePanelIfOpen() {
+    const ytSection = document.getElementById('eq-youtube-section');
+    if (ytSection && ytSection.style.display !== 'none') {
+        loadYouTubeForCurrentSong();
+    }
 }
 
 function applyStudioPreset(preset) {
@@ -4198,88 +4397,8 @@ async function saveLyrics() {
     }
 }
 
-// Update active lyric line based on current playback time
-function updateCurrentLyric() {
-    if (lyricsLines.length === 0 || currentSongIndex === -1) {
-        return;
-    }
-    
-    const currentTime = audio.currentTime;
-    let activeIndex = -1;
-    
-    // Find the current active line
-    for (let i = lyricsLines.length - 1; i >= 0; i--) {
-        if (lyricsLines[i].time >= 0 && currentTime >= lyricsLines[i].time) {
-            activeIndex = i;
-            break;
-        }
-    }
-    
-    // Only update if changed
-    if (activeIndex !== currentLyricIndex) {
-        currentLyricIndex = activeIndex;
-        
-        // Update all line classes
-        const lyricsContainer = document.getElementById('lyrics-text');
-        const lines = lyricsContainer.querySelectorAll('.lyrics-line');
-        
-        lines.forEach((line, index) => {
-            const lineTime = parseFloat(line.dataset.time);
-            if (lineTime < 0) {
-                // Non-timestamped line
-                line.className = 'lyrics-line future';
-            } else if (index === activeIndex) {
-                line.className = 'lyrics-line active';
-                
-                // Only scroll if the active line is near the bottom of the visible area
-                const container = line.closest('.lyrics-display');
-                if (container) {
-                    const lineRect = line.getBoundingClientRect();
-                    const containerRect = container.getBoundingClientRect();
-                    const lineBottom = lineRect.bottom;
-                    const containerBottom = containerRect.bottom;
-                    const threshold = containerRect.height * 0.7; // Scroll when line is 70% down
-                    
-                    // Only scroll if line is below the threshold
-                    if (lineBottom > containerRect.top + threshold) {
-                        // Custom smooth and slow scroll animation
-                        const targetPosition = line.offsetTop - (containerRect.height * 0.3);
-                        const startPosition = container.scrollTop;
-                        const distance = targetPosition - startPosition;
-                        const duration = 3500; // 3500ms for ultra-smooth animation
-                        let startTime = null;
-                        
-                        function smoothScroll(currentTime) {
-                            if (!startTime) startTime = currentTime;
-                            const elapsed = currentTime - startTime;
-                            const progress = Math.min(elapsed / duration, 1);
-                            
-                            // Ease-in-out quintic function for ultra-smooth start and end
-                            const easeProgress = progress < 0.5
-                                ? 16 * progress * progress * progress * progress * progress
-                                : 1 - Math.pow(-2 * progress + 2, 5) / 2;
-                            
-                            container.scrollTop = startPosition + (distance * easeProgress);
-                            
-                            if (progress < 1) {
-                                requestAnimationFrame(smoothScroll);
-                            } else {
-                                // Ensure final position is set precisely for smooth end
-                                container.scrollTop = targetPosition;
-                            }
-                        }
-                        
-                        requestAnimationFrame(smoothScroll);
-                    }
-                }
-            } else if (index < activeIndex) {
-                line.className = 'lyrics-line past';
-            } else {
-                line.className = 'lyrics-line future';
-            }
-        });
-    }
-}
+// NOTE: updateCurrentLyric is defined above (lines ~4046-4114) using binary search + cached DOM.
+// The duplicate slow version was removed for performance.
 
 async function deleteLyrics() {
     if (currentSongIndex === -1 || !filteredSongs[currentSongIndex]) {
